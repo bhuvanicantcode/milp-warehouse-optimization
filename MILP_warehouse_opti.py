@@ -74,7 +74,7 @@ WAREHOUSES = {
     "Bengaluru": {"lat": 12.97, "lon": 77.59, "fixed_cost": 3_500_000},
     "Chennai"  : {"lat": 13.08, "lon": 80.27, "fixed_cost": 3_200_000},
     "Kolkata"  : {"lat": 22.57, "lon": 88.36, "fixed_cost": 3_000_000},
-    "Hyderabad": {"lat": 17.39, "lon": 78.49, "fixed_cost": 2_800_000},
+    "Hyderabad": {"lat": 17.39, "lon": 78.49, "fixed_cost": 3_800_000},
 }
 
 DEMAND_CITIES = {
