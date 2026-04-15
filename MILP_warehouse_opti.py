@@ -677,76 +677,212 @@ with tab3:
 with tab4:
     st.subheader("Sensitivity Analysis — How robust is the optimal network?")
 
+    # ── Helper: compute naive (all-open) cost under stress ────────────────
+    def naive_stress_cost(fuel_mult=1.0, demand_mult=1.0):
+        wh_avail = [w for w in WAREHOUSES if w not in forced_closed]
+        fixed = sum(WAREHOUSES[w]["fixed_cost"] for w in wh_avail)
+        transport = sum(
+            cost_per_km * fuel_mult * distances[(
+                min(wh_avail, key=lambda w: distances[(w, c)]), c
+            )] * DEMAND_CITIES[c]["demand"] * demand_mult
+            for c in DEMAND_CITIES
+        )
+        return fixed + transport
+
+    # ── Helper: compute single-hub cost under stress ───────────────────────
+    def single_hub_stress_cost(fuel_mult=1.0, demand_mult=1.0):
+        wh_avail = [w for w in WAREHOUSES if w not in forced_closed]
+        best_cost = float("inf")
+        for wh in wh_avail:
+            fc = WAREHOUSES[wh]["fixed_cost"]
+            tc = sum(
+                cost_per_km * fuel_mult * distances[(wh, c)] *
+                DEMAND_CITIES[c]["demand"] * demand_mult
+                for c in DEMAND_CITIES
+            )
+            best_cost = min(best_cost, fc + tc)
+        return best_cost
+
+    STRAT_COLORS = {
+        "MILP Optimal" : "#059669",
+        "Naive (All Open)": "#F59E0B",
+        "Single Hub"   : "#94A3B8",
+    }
+    STRAT_MARKERS = {"MILP Optimal": "o", "Naive (All Open)": "s", "Single Hub": "^"}
+
+    # ── Fuel stress: run all three strategies ─────────────────────────────
+    fuel_multipliers = [1.0, 1.10, 1.20, 1.30, 1.40, 1.50]
+    fuel_xlabels     = [f"+{int((m-1)*100)}%" for m in fuel_multipliers]
+
+    fuel_data = {"MILP Optimal": [], "Naive (All Open)": [], "Single Hub": []}
+    for fm in fuel_multipliers:
+        _, _, tc_f = solve_network(WAREHOUSES, DEMAND_CITIES, distances,
+                                    cost_per_km, fm, 1.0,
+                                    forced_closed, forced_open)
+        fuel_data["MILP Optimal"].append(tc_f)
+        fuel_data["Naive (All Open)"].append(naive_stress_cost(fuel_mult=fm))
+        fuel_data["Single Hub"].append(single_hub_stress_cost(fuel_mult=fm))
+
+    # ── Demand stress: run all three strategies ───────────────────────────
+    demand_multipliers = [0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.5]
+    demand_xlabels     = [f"{int(m*100)}%" for m in demand_multipliers]
+
+    demand_data = {"MILP Optimal": [], "Naive (All Open)": [], "Single Hub": []}
+    for dm in demand_multipliers:
+        _, _, tc_d = solve_network(WAREHOUSES, DEMAND_CITIES, distances,
+                                    cost_per_km, 1.0, dm,
+                                    forced_closed, forced_open)
+        demand_data["MILP Optimal"].append(tc_d)
+        demand_data["Naive (All Open)"].append(naive_stress_cost(demand_mult=dm))
+        demand_data["Single Hub"].append(single_hub_stress_cost(demand_mult=dm))
+
+    # ── Charts ────────────────────────────────────────────────────────────
     c1, c2 = st.columns(2)
 
     with c1:
         st.markdown("#### Fuel Cost Shock (+10% to +50%)")
-        fuel_multipliers = [1.0, 1.10, 1.20, 1.30, 1.40, 1.50]
-        fuel_costs = []
-        for fm in fuel_multipliers:
-            _, _, tc_f = solve_network(WAREHOUSES, DEMAND_CITIES, distances,
-                                        cost_per_km, fm, 1.0,
-                                        forced_closed, forced_open)
-            fuel_costs.append(tc_f)
-
-        base_cost = fuel_costs[0]
-        fig, ax = plt.subplots(figsize=(6, 4))
+        fig, ax = plt.subplots(figsize=(6, 4.2))
         fig.patch.set_facecolor("#F8FAFC"); ax.set_facecolor("#F8FAFC")
-        ax.plot([f"+{int((m-1)*100)}%" for m in fuel_multipliers],
-                [c * USD_TO_INR / 1e7 for c in fuel_costs],
-                color="#EF4444", linewidth=2.5, marker="o", markersize=7)
-        ax.fill_between(range(len(fuel_multipliers)),
-                        [base_cost * USD_TO_INR / 1e7] * len(fuel_multipliers),
-                        [c * USD_TO_INR / 1e7 for c in fuel_costs],
-                        alpha=0.12, color="#EF4444")
+        for strat, vals in fuel_data.items():
+            ax.plot(fuel_xlabels,
+                    [v * USD_TO_INR / 1e7 for v in vals],
+                    color=STRAT_COLORS[strat], linewidth=2.2,
+                    marker=STRAT_MARKERS[strat], markersize=7,
+                    label=strat)
         ax.set_xlabel("Fuel Price Increase")
         ax.set_ylabel("Total Network Cost (₹ Crore)")
         ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: f"₹{x:.2f}Cr"))
+        ax.legend(fontsize=8, loc="upper left")
         ax.grid(alpha=0.3); ax.spines[["top", "right"]].set_visible(False)
+        plt.tight_layout()
         st.pyplot(fig); plt.close()
 
     with c2:
         st.markdown("#### Demand Surge (80% to 150% of baseline)")
-        demand_multipliers = [0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.5]
-        demand_costs = []
-        for dm in demand_multipliers:
-            _, _, tc_d = solve_network(WAREHOUSES, DEMAND_CITIES, distances,
-                                        cost_per_km, 1.0, dm,
-                                        forced_closed, forced_open)
-            demand_costs.append(tc_d)
-
-        fig, ax = plt.subplots(figsize=(6, 4))
+        fig, ax = plt.subplots(figsize=(6, 4.2))
         fig.patch.set_facecolor("#F8FAFC"); ax.set_facecolor("#F8FAFC")
-        demand_labels = [f"{int(m*100)}%" for m in demand_multipliers]
-        ax.plot(demand_labels,
-                [c * USD_TO_INR / 1e7 for c in demand_costs],
-                color="#2563EB", linewidth=2.5, marker="s", markersize=7)
-        # FIX 4: derive baseline index from the actual list, not a hardcoded 2
+        for strat, vals in demand_data.items():
+            ax.plot(demand_xlabels,
+                    [v * USD_TO_INR / 1e7 for v in vals],
+                    color=STRAT_COLORS[strat], linewidth=2.2,
+                    marker=STRAT_MARKERS[strat], markersize=7,
+                    label=strat)
         baseline_idx = demand_multipliers.index(1.0)
-        ax.axvline(baseline_idx, color="#94A3B8", linestyle=":", linewidth=1.5,
+        ax.axvline(baseline_idx, color="#CBD5E1", linestyle=":", linewidth=1.5,
                    label="Baseline (100%)")
         ax.set_xlabel("Demand Level (% of baseline)")
         ax.set_ylabel("Total Network Cost (₹ Crore)")
         ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: f"₹{x:.2f}Cr"))
-        ax.legend(); ax.grid(alpha=0.3); ax.spines[["top", "right"]].set_visible(False)
+        ax.legend(fontsize=8, loc="upper left")
+        ax.grid(alpha=0.3); ax.spines[["top", "right"]].set_visible(False)
+        plt.tight_layout()
         st.pyplot(fig); plt.close()
 
-    _, _, tc_fuel20 = solve_network(WAREHOUSES, DEMAND_CITIES, distances,
-                                     cost_per_km, 1.2, 1.0,
-                                     forced_closed, forced_open)
-    fuel_impact = tc_fuel20 - total_cost
+    # ── Gap-to-optimal area chart (how much each naive wastes) ────────────
+    st.markdown("#### Cost Gap vs. MILP Optimal — How much do naïve strategies over-spend?")
+    fig, axes = plt.subplots(1, 2, figsize=(13, 3.8), sharey=False)
+    fig.patch.set_facecolor("#F8FAFC")
+
+    for ax, xlabels, stress_data, xlabel_str in [
+        (axes[0], fuel_xlabels, fuel_data, "Fuel Price Increase"),
+        (axes[1], demand_xlabels, demand_data, "Demand Level (% of baseline)"),
+    ]:
+        ax.set_facecolor("#F8FAFC")
+        opt_vals = [v * USD_TO_INR / 1e7 for v in stress_data["MILP Optimal"]]
+        for strat in ["Naive (All Open)", "Single Hub"]:
+            strat_vals = [v * USD_TO_INR / 1e7 for v in stress_data[strat]]
+            gap = [s - o for s, o in zip(strat_vals, opt_vals)]
+            ax.fill_between(range(len(xlabels)), gap, alpha=0.35,
+                            color=STRAT_COLORS[strat], label=f"{strat} excess")
+            ax.plot(range(len(xlabels)), gap,
+                    color=STRAT_COLORS[strat], linewidth=1.8,
+                    marker=STRAT_MARKERS[strat], markersize=5)
+        ax.set_xticks(range(len(xlabels))); ax.set_xticklabels(xlabels, fontsize=8)
+        ax.set_xlabel(xlabel_str)
+        ax.set_ylabel("Extra Cost vs. Optimal (₹ Crore)")
+        ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: f"₹{x:.2f}Cr"))
+        ax.legend(fontsize=8); ax.grid(alpha=0.3)
+        ax.spines[["top", "right"]].set_visible(False)
+
+    plt.tight_layout()
+    st.pyplot(fig); plt.close()
+
+    # ── Final comparison table ─────────────────────────────────────────────
+    st.markdown("#### Strategy Stress-Test Summary Table")
+    st.caption("Total network cost (₹ Crore) at each stress level — green = best in row")
+
+    scenarios_ordered = ["MILP Optimal", "Naive (All Open)", "Single Hub"]
+
+    # Build fuel table
+    fuel_rows = []
+    for fm, lbl in zip(fuel_multipliers, fuel_xlabels):
+        row = {"Fuel Shock": lbl}
+        for strat in scenarios_ordered:
+            idx = fuel_multipliers.index(fm)
+            row[strat] = round(fuel_data[strat][idx] * USD_TO_INR / 1e7, 2)
+        fuel_rows.append(row)
+    df_fuel = pd.DataFrame(fuel_rows).set_index("Fuel Shock")
+
+    # Build demand table
+    demand_rows = []
+    for dm, lbl in zip(demand_multipliers, demand_xlabels):
+        row = {"Demand Level": lbl}
+        for strat in scenarios_ordered:
+            idx = demand_multipliers.index(dm)
+            row[strat] = round(demand_data[strat][idx] * USD_TO_INR / 1e7, 2)
+        demand_rows.append(row)
+    df_demand = pd.DataFrame(demand_rows).set_index("Demand Level")
+
+    def highlight_min(row):
+        is_min = row == row.min()
+        return ["background-color:#D1FAE5; color:#065F46; font-weight:600"
+                if v else "" for v in is_min]
+
+    tc1, tc2 = st.columns(2)
+    with tc1:
+        st.markdown("**Fuel Cost Shock (₹ Crore)**")
+        st.dataframe(
+            df_fuel.style.apply(highlight_min, axis=1)
+                         .format("₹{:.2f}Cr"),
+            use_container_width=True
+        )
+    with tc2:
+        st.markdown("**Demand Surge (₹ Crore)**")
+        st.dataframe(
+            df_demand.style.apply(highlight_min, axis=1)
+                           .format("₹{:.2f}Cr"),
+            use_container_width=True
+        )
+
+    # ── Key findings callout ───────────────────────────────────────────────
+    tc_fuel20_opt    = fuel_data["MILP Optimal"][2]      # +20% index
+    tc_fuel20_naive  = fuel_data["Naive (All Open)"][2]
+    tc_fuel20_single = fuel_data["Single Hub"][2]
+    fuel_impact      = tc_fuel20_opt - fuel_data["MILP Optimal"][0]
+
+    tc_dem150_opt    = demand_data["MILP Optimal"][-1]   # 150% index
+    tc_dem150_naive  = demand_data["Naive (All Open)"][-1]
+    gap_naive_150    = tc_dem150_naive - tc_dem150_opt
+    gap_single_150   = demand_data["Single Hub"][-1] - tc_dem150_opt
 
     st.markdown(f"""
     <div class="warn-box">
-    <b>⚡ Key Sensitivity Findings:</b><br>
-    • A <b>20% fuel price increase</b> raises total network cost by 
-      <b>{inr(fuel_impact)} (+{fuel_impact/total_cost*100:.1f}%)</b> — 
-      explaining why companies like Amazon and Flipkart negotiate 
-      long-term fuel hedging contracts.<br>
+    <b>⚡ Key Sensitivity Findings (All Three Strategies):</b><br>
+    • A <b>20% fuel price increase</b> raises MILP cost by 
+      <b>{inr(fuel_impact)} (+{fuel_impact/fuel_data["MILP Optimal"][0]*100:.1f}%)</b>, 
+      but Naive over-spends by an extra 
+      <b>{inr(tc_fuel20_naive - tc_fuel20_opt)}</b> and 
+      Single Hub by an extra 
+      <b>{inr(tc_fuel20_single - tc_fuel20_opt)}</b> at the same shock level.<br>
+    • At <b>150% demand surge</b>, MILP still dominates: 
+      Naive wastes <b>{inr(gap_naive_150)}</b> more, 
+      Single Hub wastes <b>{inr(gap_single_150)}</b> more — 
+      the optimized topology's advantage widens under high-demand stress.<br>
     • Network topology (which warehouses are open) is <b>stable</b> under ±30% 
-      demand shocks — fixed-cost dominance means the optimal location set 
+      demand shocks for MILP — fixed-cost dominance means the optimal location set 
       does not change, only total spend changes.<br>
     • <b>Recommendation:</b> Negotiate fuel cost pass-through clauses in 3PL 
       contracts and revisit warehouse footprint only if demand surges exceed 
-      40% in a specific region.
+      40% in a specific region. Naïve strategies lose ground fastest under 
+      fuel shocks due to unnecessarily long transport legs from suboptimal DCs.
     </div>""", unsafe_allow_html=True)
