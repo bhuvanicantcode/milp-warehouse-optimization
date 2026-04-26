@@ -247,7 +247,7 @@ with st.sidebar:
     st.markdown("---")
 
     cost_per_km = st.number_input(
-        "Base Transport Cost ($/km/unit)", 0.0005, 0.005, 0.0018, 0.0001,
+        "Base Transport Cost ($/km/unit)", 0.0005, 0.05, 0.0018, 0.0001,
         format="%.4f"
     )
 
