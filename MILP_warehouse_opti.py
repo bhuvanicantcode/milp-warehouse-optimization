@@ -69,12 +69,12 @@ st.markdown("""
 # DATA
 # ═══════════════════════════════════════════════════════════════════════════
 WAREHOUSES = {
-    "Mumbai"   : {"lat": 19.08, "lon": 72.88, "fixed_cost": 4_200_000},
-    "Delhi"    : {"lat": 28.70, "lon": 77.10, "fixed_cost": 3_800_000},
-    "Bengaluru": {"lat": 12.97, "lon": 77.59, "fixed_cost": 3_500_000},
-    "Chennai"  : {"lat": 13.08, "lon": 80.27, "fixed_cost": 3_200_000},
-    "Kolkata"  : {"lat": 22.57, "lon": 88.36, "fixed_cost": 3_800_000},
-    "Hyderabad": {"lat": 17.39, "lon": 78.49, "fixed_cost": 3_800_000},
+    "Mumbai"   : {"lat": 19.08, "lon": 72.88, "fixed_cost": 1_200_000},
+    "Delhi"    : {"lat": 28.70, "lon": 77.10, "fixed_cost": 1_800_000},
+    "Bengaluru": {"lat": 12.97, "lon": 77.59, "fixed_cost": 1_500_000},
+    "Chennai"  : {"lat": 13.08, "lon": 80.27, "fixed_cost": 1_000_000},
+    "Kolkata"  : {"lat": 22.57, "lon": 88.36, "fixed_cost": 800_000},
+    "Hyderabad": {"lat": 17.39, "lon": 78.49, "fixed_cost": 1_200_000},
 }
 
 DEMAND_CITIES = {
